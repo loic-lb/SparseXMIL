@@ -182,5 +182,19 @@ with `--heatmap_path` the path to the folder containing the heatmaps (.npy files
 and `--annotations_path` the path to the folder containing the ground truth annotations. Ground truth annotations can be
 retrieved [here](https://sites.google.com/view/aipath-dataset/home/rcc-region-and-subtyping).
 
+## Reference
+
+If you find this code useful in your research then please cite:
+
+```
+@unpublished{lebescond:hal-04531177,
+  TITLE = {{SparseXMIL: Leveraging spatial context for classifying whole slide images in digital pathology}},
+  AUTHOR = {Le Bescond, Lo{\"i}c and Lerousseau, Marvin and Andre, Fabrice and Talbot, Hugues},
+  URL = {https://hal.science/hal-04531177},
+  YEAR = {2024},
+  MONTH = Apr,
+}
+```
+
 ## License
 XMIL is GNU AGPLv3 licensed, as found in the LICENSE file.
