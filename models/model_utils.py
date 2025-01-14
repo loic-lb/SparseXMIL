@@ -6,7 +6,8 @@ from models.model_average import AverageMIL
 from models.model_attention import GatedAttention
 from models.model_transmil import TransMIL
 from models.model_dgcn import DGCNMIL
-
+from models.model_xmil_dense import DenseXMIL
+from models.model_nic import NIC
 
 class ModelEmaV2(nn.Module):
     def __init__(self, model, model_name, perf_aug, decay=0.9999, device=None):
@@ -40,6 +41,12 @@ class ModelEmaV2(nn.Module):
         elif model_type == "sparseconvmil":
             model_fct = SparseConvMIL(model.nb_layers_in, sparse_map_downsample=model.sparse_map_downsample,
                                       perf_aug=perf_aug, num_classes=model.num_classes)
+        elif model_type == "nic":
+            model_fct = NIC(model.nb_layers_in, sparse_map_downsample=model.sparse_map_downsample,
+                            perf_aug=perf_aug, num_classes=model.num_classes)
+        elif model_type == "dense_xmil":
+            model_fct = DenseXMIL(model.nb_layers_in, sparse_map_downsample=model.sparse_map_downsample,
+                           num_classes=model.num_classes, perf_aug=perf_aug)
         else:
             model_fct = XMIL(nb_layers_in=model.nb_layers_in, sparse_map_downsample=model.sparse_map_downsample,
                              D=model.D, num_classes=model.num_classes, perf_aug=perf_aug)

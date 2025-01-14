@@ -1,6 +1,7 @@
 import argparse
 import comet_ml
 import os
+import time
 import numpy as np
 import pandas as pd
 import torch
@@ -13,6 +14,8 @@ from torch.nn.functional import softmax
 from dataset import DatasetPretrained
 from models.model_sparseconvmil import SparseConvMIL
 from models.model_xmil import XMIL
+from models.model_xmil_dense import DenseXMIL
+from models.model_nic import NIC
 from utils import get_dataloader, create_illustrations, apply_random_seed, split_dataset, measure_perf
 from models.model_utils import ModelEmaV2
 
@@ -43,6 +46,8 @@ def _define_args():
                         help='optimizer to use')
     parser.add_argument('--batch_size', type=int, default=16, metavar='SIZE',
                         help='number of slides sampled per iteration')
+    parser.add_argument('--clip', type=float, default=None, metavar='CLIP',
+                        help="Perform gradient clipping")
 
     # Evaluation parameters
     parser.add_argument('--test_time_augmentation', action="store_true", help='perform test time augmentation during'
@@ -53,13 +58,16 @@ def _define_args():
     # Model parameters
     parser.add_argument('--model', type=str, choices=["attention", "xmil",
                                                       "transmil", "average",
-                                                      "sparseconvmil", "dgcn"],
+                                                      "sparseconvmil", "dgcn",
+                                                      "dense_xmil",
+                                                      "nic"],
                         default='xmil',
                         metavar='MODEL',
                         help='model name')
     parser.add_argument('--transmil_size', type=int, default=512, choices=[256, 512],
                         metavar='SIZE', help='size of the TransMIL layers')
     parser.add_argument('--sparse-map-downsample', type=int, default=10, help='downsampling factor of the sparse map')
+    parser.add_argument('--remove_perf_image_aug', action="store_false", help='remove image augmentation during training')
 
     # Dataset parameters
     parser.add_argument('--split', type=str, default=None, help="path to predetermined splitting of dataset")
@@ -76,6 +84,7 @@ def _define_args():
 
     args = parser.parse_args()
 
+    experiment.set_name(f"{args.experiment_name}: Split {args.split_id}")  # Comment this line when not using comet.ml
     experiment_path = os.path.join(args.experiment_folder, args.experiment_name, f"Split {args.split_id}")
     Path(experiment_path).mkdir(parents=True, exist_ok=True)
 
@@ -94,7 +103,9 @@ def _define_args():
         'transmil_size': args.transmil_size,
         'split': args.split,
         'sparse_map_downsample': args.sparse_map_downsample,
+        'perf_image_aug': args.remove_perf_image_aug,
         'batch_size': args.batch_size,
+        'clip': args.clip,
         'n_tiles_per_wsi': args.n_tiles_per_wsi,
         'perc_tiles_per_wsi': args.perc_tiles_per_wsi,
         'j': args.j,
@@ -105,7 +116,7 @@ def _define_args():
     return hyper_parameters
 
 
-def perform_epoch(mil_model, mil_model_ema, dataloader, optimizer, loss_function, train=True):
+def perform_epoch(mil_model, mil_model_ema, dataloader, optimizer, loss_function, clip=None, train=True):
     """
     Perform a complete training/validation epoch by looping through all data of the dataloader.
     :param mil_model: MIL model to be trained
@@ -120,12 +131,16 @@ def perform_epoch(mil_model, mil_model_ema, dataloader, optimizer, loss_function
     ground_truths = []
     losses = []
 
+    # Boolean to set to True to plot sparse maps
+    example_plot = True
+    start_time = time.time()
     for data, locations, slides_labels, slides_ids in dataloader:
         slides_labels = slides_labels.cuda()
 
         if train:
             optimizer.zero_grad()
-            if mil_model.name.startswith('Sparse'):
+            if mil_model.name.startswith('Sparse') or mil_model.name.startswith('Dense') or mil_model.name.startswith(
+                    "NIC"):
                 predictions, tiles_locations = mil_model(data, locations)
             elif mil_model.name.startswith('DGCN'):
                 predictions = mil_model(data, locations)
@@ -133,13 +148,16 @@ def perform_epoch(mil_model, mil_model_ema, dataloader, optimizer, loss_function
                 predictions = mil_model(data)
             loss = loss_function(predictions, slides_labels)
             loss.backward()
+            if clip:
+                torch.nn.utils.clip_grad_norm_(mil_model.parameters(), clip)
             optimizer.step()
 
             mil_model_ema.update(mil_model)
 
         else:
             with torch.no_grad():
-                if mil_model.name.startswith('Sparse'):
+                if mil_model.name.startswith('Sparse') or mil_model.name.startswith('Dense') \
+                        or mil_model.name.startswith("NIC"):
                     predictions, _ = mil_model_ema.module(data, locations)
                 elif mil_model.name.startswith('DGCN'):
                     predictions = mil_model_ema.module(data, locations)
@@ -147,6 +165,8 @@ def perform_epoch(mil_model, mil_model_ema, dataloader, optimizer, loss_function
                     predictions = mil_model_ema.module(data)
 
                 loss = loss_function(predictions, slides_labels)
+
+        training_time = time.time() - start_time
 
         predictions = softmax(predictions, dim=-1)
 
@@ -158,7 +178,7 @@ def perform_epoch(mil_model, mil_model_ema, dataloader, optimizer, loss_function
     proba_predictions = np.array(proba_predictions)
     predicted_classes = np.argmax(proba_predictions, axis=1)
 
-    return losses, proba_predictions, ground_truths, predicted_classes
+    return losses, proba_predictions, ground_truths, predicted_classes, training_time
 
 
 def main(hyper_parameters):
@@ -201,13 +221,19 @@ def main(hyper_parameters):
         model = DGCNMIL(num_features=1024, n_classes=n_classes).cuda()
     elif hyper_parameters['model'] == 'sparseconvmil':
         model = SparseConvMIL(1024, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
-                              perf_aug=True, num_classes=n_classes).cuda()
+                              perf_aug=hyper_parameters['perf_image_aug'], num_classes=n_classes).cuda()
+    elif hyper_parameters['model'] == 'dense_xmil':
+        model = DenseXMIL(1024, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
+                          num_classes=n_classes, perf_aug=hyper_parameters['perf_image_aug']).cuda()
+    elif hyper_parameters['model'] == 'nic':
+        model = NIC(1024, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
+                    num_classes=n_classes, perf_aug=hyper_parameters['perf_image_aug']).cuda()
     else:
         model = XMIL(1024, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
-                     num_classes=n_classes, perf_aug=True).cuda()
+                     num_classes=n_classes, perf_aug=hyper_parameters['perf_image_aug']).cuda()
 
     # Create EMA version of the model
-    model_ema = ModelEmaV2(model, hyper_parameters['model'], perf_aug=hyper_parameters['TTA'], decay=0.99,
+    model_ema = ModelEmaV2(model, hyper_parameters['model'], perf_aug=hyper_parameters['TTA'] and hyper_parameters['perf_image_aug'], decay=0.99,
                            device="cuda")
 
     print('  done')
@@ -229,10 +255,11 @@ def main(hyper_parameters):
     val_perfs = []
 
     for epoch in range(hyper_parameters["epochs"]):
-        model.train()
         train_losses, train_probas, \
-            train_ground_truths, train_predicted_classes = perform_epoch(model, model_ema,
-                                                                         train_dataloader, optimizer, loss_function)
+            train_ground_truths, train_predicted_classes, train_time = perform_epoch(model, model_ema,
+                                                                                     train_dataloader, optimizer,
+                                                                                     loss_function,
+                                                                                     clip=hyper_parameters['clip'])
 
         train_loss, train_bac, train_f1, train_auc = measure_perf(train_losses, train_ground_truths,
                                                                   train_predicted_classes, train_probas,
@@ -249,10 +276,10 @@ def main(hyper_parameters):
         for sampling_id in range(nb_repeat):
 
             val_losses, val_probas, \
-                val_ground_truths, val_predicted_classes = perform_epoch(model,
-                                                                         model_ema,
-                                                                         val_dataloader, optimizer,
-                                                                         loss_function, train=False)
+                val_ground_truths, val_predicted_classes, val_time = perform_epoch(model,
+                                                                                   model_ema,
+                                                                                   val_dataloader, optimizer,
+                                                                                   loss_function, train=False)
             # Keep track of the performance for each TTA iteration
             val_loss, val_bac, val_f1, val_auc = measure_perf(val_losses, val_ground_truths,
                                                               val_predicted_classes, val_probas,

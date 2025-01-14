@@ -13,6 +13,8 @@ from models.model_average import AverageMIL
 from models.model_dgcn import DGCNMIL
 from models.model_sparseconvmil import SparseConvMIL
 from models.model_xmil import XMIL
+from models.model_xmil_dense import DenseXMIL
+from models.model_nic import NIC
 from utils import get_dataloader
 from models.model_utils import ModelEmaV2
 from utils import apply_random_seed
@@ -41,11 +43,12 @@ def main():
     parser.add_argument('--test_time_augmentation_times', type=int, default=10, metavar='N',
                         help='number of test time augmentation iterations')
     parser.add_argument('--use_ema', action="store_true", help='exponential moving average used during training')
+    parser.add_argument('--remove_perf_image_aug', action="store_false", help='remove image augmentation during training')
 
     # Model parameters
     parser.add_argument('--model', type=str, choices=["attention", "xmil",
                                                       "transmil", "average", "sparseconvmil",
-                                                      "dgcn"],
+                                                      "dgcn", "dense_xmil", "nic"],
                         default='xception', metavar='MODEL', help='model name')
     parser.add_argument('--transmil_size', type=int, default=512, metavar='SIZE', help='size of the TransMIL layers')
     parser.add_argument('--sparse-map-downsample', type=int, default=256, help='downsampling factor of the sparse map')
@@ -100,6 +103,7 @@ def main():
 
         # Loads MIL model, optimizer and loss function
         print('Loading model')
+        perf_aug = args.test_time_augmentation and args.remove_perf_image_aug
 
         if args.model == 'attention':
             model = GatedAttention(1024, n_classes).cuda()
@@ -111,15 +115,21 @@ def main():
             model = DGCNMIL(num_features=1024, n_classes=n_classes).cuda()
         elif args.model == 'sparseconvmil':
             model = SparseConvMIL(1024, sparse_map_downsample=args.sparse_map_downsample,
-                                  perf_aug=True, num_classes=n_classes).cuda()
+                                  perf_aug=perf_aug, num_classes=n_classes).cuda()
+        elif args.model == "dense_xmil":
+            model = DenseXMIL(1024, sparse_map_downsample=args.sparse_map_downsample,
+                           num_classes=n_classes, perf_aug=perf_aug).cuda()
+        elif args.model == "nic":
+            model = NIC(1024, sparse_map_downsample=args.sparse_map_downsample,
+                           num_classes=n_classes, perf_aug=perf_aug).cuda()
         elif args.model == "xmil":
             model = XMIL(nb_layers_in=1024, sparse_map_downsample=args.sparse_map_downsample,
-                         num_classes=n_classes, perf_aug=args.test_time_augmentation).cuda()
+                         num_classes=n_classes, perf_aug=perf_aug).cuda()
         else:
             raise NotImplementedError
 
         if args.use_ema:
-            model = ModelEmaV2(model, args.model, perf_aug=args.test_time_augmentation, device="cuda")
+            model = ModelEmaV2(model, args.model, perf_aug=perf_aug, device="cuda")
 
         # Retrieves best validation model by looking last epoch saved
         experiment_path = os.path.join(args.experiment_folder, args.experiment_name, f"Split {split_id}")
@@ -128,9 +138,9 @@ def main():
         else:
             checkpoints = sorted([file for file in os.listdir(experiment_path) if file.endswith(".pt")],
                                  key=lambda x: int(x.split('_')[1].split('.')[0]))
-            best_model = os.path.join(experiment_path, checkpoints[-1])
-            model.load_state_dict(torch.load(best_model)['model'])
-            print(f'Best model found: {best_model}')
+            best_model = torch.load(os.path.join(experiment_path, checkpoints[-1]))
+            model.load_state_dict(best_model['model'])
+            print(f'Best model found: {checkpoints[-1]}')
         if best_model["settings"] is not None:
             print("Setting model settings to None")
             best_model["settings"] = None
@@ -161,7 +171,8 @@ def main():
                             # embeddings for each slide in the batch
                         else:
                             raise NotImplementedError
-                    elif model.name.startswith('Sparse') or model.name.startswith('DGCN'):
+                    elif model.name.startswith('Sparse') or model.name.startswith('DGCN') \
+                            or model.name.startswith("Dense") or model.name.startswith("NIC"):
                         if args.shuffle_mode == "idx":
                             locations = [loc[torch.randperm(loc.shape[0])] for loc in locations]  # Shuffle the
                             # coordinates for each slide in the batch
@@ -179,7 +190,7 @@ def main():
                 slides_labels = slides_labels.cuda()
 
                 with torch.no_grad():
-                    if model.name.startswith('Sparse'):
+                    if model.name.startswith('Sparse') or model.name.startswith("Dense") or model.name.startswith("NIC"):
                         predictions, _ = model(data, locations)
                     elif model.name.startswith('DGCN'):
                         predictions = model(data, locations)

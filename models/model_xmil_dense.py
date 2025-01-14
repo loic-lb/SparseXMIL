@@ -1,48 +1,47 @@
+import warnings
+
 import torch
 import random
 import math
 import torch.nn as nn
+import torch.nn.functional as F
 
-from MinkowskiEngine import (MinkowskiGlobalAvgPooling,
-                             MinkowskiLinear,
-                             MinkowskiReLU,
-                             SparseTensor)
-
+from MinkowskiEngine import SparseTensor
 from MinkowskiEngine import SparseTensorQuantizationMode
 from MinkowskiEngine.utils import batched_coordinates
 
-from models.model_xception_sparse import sparsexception
+from models.model_xception_dense import xception
 
 
-class XMIL(nn.Module):
-    def __init__(self, nb_layers_in, sparse_map_downsample, perf_aug, num_classes, D=2,
+class DenseXMIL(nn.Module):
+    def __init__(self, nb_layers_in, sparse_map_downsample, perf_aug, num_classes,
                  tile_coordinates_rotation_augmentation=True, tile_coordinates_flips_augmentation=True,
                  tile_coordinates_resize_augmentation=True):
-        super(XMIL, self).__init__()
+        super(DenseXMIL, self).__init__()
 
-        self.name = "Sparse_XMIL"
+        self.name = "Dense_XMIL"
+        self.min_size = (17, 17)
         self.nb_layers_in = nb_layers_in
         self.sparse_map_downsample = sparse_map_downsample
         self.perf_aug = perf_aug
         self.num_classes = num_classes
-        self.D = D
         self.tile_coordinates_rotation_augmentation = tile_coordinates_rotation_augmentation
         self.tile_coordinates_flips_augmentation = tile_coordinates_flips_augmentation
         self.tile_coordinates_resize_augmentation = tile_coordinates_resize_augmentation
 
         self.adapt_layer = self.get_adapt_layer()
 
-        self.sparse_model = sparsexception(D=self.D)
+        self.model = xception()
 
-        self.pool_minkow = MinkowskiGlobalAvgPooling()
+        self.pool = nn.AdaptiveAvgPool2d(1)
 
         self.classifier = self.get_classifier()
 
     def get_adapt_layer(self):
-        return nn.Sequential(MinkowskiLinear(self.nb_layers_in, 64), MinkowskiReLU())
+        return nn.Sequential(nn.Linear(1024, 64), nn.ReLU())
 
     def get_classifier(self):
-        return nn.Sequential(MinkowskiLinear(2048, self.num_classes))
+        return nn.Sequential(nn.Linear(2048, self.num_classes))
 
     def data_augment_tiles_locations(self, tiles_locations):
         """
@@ -88,10 +87,12 @@ class XMIL(nn.Module):
         tiles_locations -= torch.min(tiles_locations, dim=0, keepdim=True)[0]
         return tiles_locations
 
-    def forward(self, x, tiles_original_locations, visualize=False):
-
+    def forward(self, x, tiles_original_locations):
+        
         x = torch.concat(x)
         x = x.cuda()
+
+        x = self.adapt_layer(x)
 
         if self.perf_aug:
             tiles_locations = batched_coordinates([self.data_augment_tiles_locations(tl / self.sparse_map_downsample)
@@ -105,13 +106,24 @@ class XMIL(nn.Module):
                                   coordinates=tiles_locations,
                                   quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
 
-        sparse_map = self.adapt_layer(sparse_map)
-        sparse_map = self.sparse_model(sparse_map)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            dense_map = sparse_map.dense()[0]
 
-        if visualize:
-            self.sparse_map = sparse_map
+        if dense_map.shape[-1] < self.min_size[1] or dense_map.shape[-2] < self.min_size[0]:
+            pad = [max((self.min_size[1] - dense_map.shape[-1]) // 2, 0),
+                   max((self.min_size[1] - dense_map.shape[-1]) // 2 + 1, 0),
+                   max((self.min_size[0] - dense_map.shape[-2]) // 2, 0),
+                   max((self.min_size[0] - dense_map.shape[-2]) // 2 + 1, 0)]
+             
+            dense_map = F.pad(dense_map, pad, mode='constant', value=0)
 
-        result = self.pool_minkow(sparse_map)
-        result = self.classifier(result).F
+        dense_map = self.model(dense_map)
 
+        result = self.pool(dense_map)
+
+        result = result.view(result.size(0), result.size(1))
+
+        result = self.classifier(result)
+        
         return result, tiles_locations

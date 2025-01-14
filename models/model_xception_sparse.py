@@ -62,7 +62,7 @@ class SparseBlock(nn.Module):
 
 class SparseXception(nn.Module):
 
-    def __init__(self, D=2, normalized=False):
+    def __init__(self, D=2):
         super(SparseXception, self).__init__()
 
         self.entry_flow = nn.Sequential(SparseBlock(64, 128, 2, 2, start_with_relu=False, D=D),

@@ -7,10 +7,10 @@ import os
 import openslide
 from PIL import Image
 
-from .wsi_utils import local_average, compute_law_feats, filter_ROI, thresh_ROI, save_hdf5, \
+from wsi_utils import local_average, compute_law_feats, filter_ROI, thresh_ROI, save_hdf5, \
     floodfill_ROI, contour_ROI, isWhitePatch_S, isBlackPatch_S
 
-from .util_classes import isInContourV1, isInContourV2, isInContourV3_Easy, isInContourV3_Hard, \
+from util_classes import isInContourV1, isInContourV2, isInContourV3_Easy, isInContourV3_Hard, \
     Contour_Checking_fn
 
 Image.MAX_IMAGE_PIXELS = 225705984000

@@ -89,7 +89,7 @@ python ./tile_extraction/create_patches_fp.py --source <path_to_slides> --save_d
 --dataset <path_to_csv_dataset_file> --extension .svs --patch --seg --stitch 
 ```
 
-For convenience, the patches extracted for each experiment are available in the [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EQwj3jTwIjhOq8mpo3ySqe4BhXNKKeELWOXQjEre1jnDrw?e=1R47RJ).
+For convenience, the patches extracted for each experiment are available in the [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq).
 
 To extract features vector from patch coordinates, you may run the following command:
 
@@ -166,7 +166,7 @@ used the second training setting for the interpretation of these models.
 
 The argument `--annotated_data` is used to specify the csv file containing the id of the slides for the interpretation
 experiments (to avoid running the interpretation experiments on all the slides). The csv file is available in the
-[onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EQwj3jTwIjhOq8mpo3ySqe4BhXNKKeELWOXQjEre1jnDrw?e=1R47RJ). The argument `--save_heatmaps` is used to save the heatmaps produced by the interpretation 
+[onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq). The argument `--save_heatmaps` is used to save the heatmaps produced by the interpretation 
 experiments as .npy files, and the argument `--save_mask_contours` similarly saves the mask of the tissue for 
 each slide (both are necessary to run the evaluation script). 
 You may remove these arguments when evaluation is not needed to save disk space. 
@@ -181,6 +181,10 @@ python eval_interpret.py --heatmap_path <path_to_heatmap_folder> --annotations_p
 with `--heatmap_path` the path to the folder containing the heatmaps (.npy files) produced by the `interpret.py` script, 
 and `--annotations_path` the path to the folder containing the ground truth annotations. Ground truth annotations can be
 retrieved [here](https://sites.google.com/view/aipath-dataset/home/rcc-region-and-subtyping).
+
+## Scalability
+
+To run the scalability experiments, you may use the script `script_scalability.sh` available in the `scripts` folder.
 
 ## Reference
 

@@ -1,48 +1,68 @@
+import warnings
+
 import torch
 import random
 import math
 import torch.nn as nn
+import torch.nn.functional as F
 
-from MinkowskiEngine import (MinkowskiGlobalAvgPooling,
-                             MinkowskiLinear,
-                             MinkowskiReLU,
-                             SparseTensor)
-
+from MinkowskiEngine import SparseTensor
 from MinkowskiEngine import SparseTensorQuantizationMode
 from MinkowskiEngine.utils import batched_coordinates
 
-from models.model_xception_sparse import sparsexception
+from models.model_xception_dense import SeparableConv2d
 
 
-class XMIL(nn.Module):
-    def __init__(self, nb_layers_in, sparse_map_downsample, perf_aug, num_classes, D=2,
+def conv_block(in_channels, out_channels, kernel_size=1, stride=1, padding=0):
+    return nn.Sequential(
+        SeparableConv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding),
+        nn.BatchNorm2d(out_channels),
+        nn.LeakyReLU(),
+        nn.Dropout2d(p=0.2))
+
+
+class NIC(nn.Module):
+    def __init__(self, nb_layers_in, sparse_map_downsample, perf_aug, num_classes,
                  tile_coordinates_rotation_augmentation=True, tile_coordinates_flips_augmentation=True,
                  tile_coordinates_resize_augmentation=True):
-        super(XMIL, self).__init__()
+        super(NIC, self).__init__()
 
-        self.name = "Sparse_XMIL"
+        self.name = "NIC"
+        self.min_size = (65, 65)
         self.nb_layers_in = nb_layers_in
         self.sparse_map_downsample = sparse_map_downsample
         self.perf_aug = perf_aug
         self.num_classes = num_classes
-        self.D = D
         self.tile_coordinates_rotation_augmentation = tile_coordinates_rotation_augmentation
         self.tile_coordinates_flips_augmentation = tile_coordinates_flips_augmentation
         self.tile_coordinates_resize_augmentation = tile_coordinates_resize_augmentation
 
         self.adapt_layer = self.get_adapt_layer()
 
-        self.sparse_model = sparsexception(D=self.D)
+        self.model = self.create_model()
 
-        self.pool_minkow = MinkowskiGlobalAvgPooling()
+        self.pool = nn.AdaptiveAvgPool2d(1)
 
         self.classifier = self.get_classifier()
 
     def get_adapt_layer(self):
-        return nn.Sequential(MinkowskiLinear(self.nb_layers_in, 64), MinkowskiReLU())
+        return nn.Sequential(nn.Linear(1024, 128), nn.ReLU())
+
+    def create_model(self):
+        return nn.Sequential(conv_block(128, 128, kernel_size=3, stride=2, padding=1),
+                             conv_block(128, 128, kernel_size=3, stride=2, padding=1),
+                             conv_block(128, 128, kernel_size=3, stride=2, padding=1),
+                             conv_block(128, 128, kernel_size=3, stride=2, padding=1),
+                             conv_block(128, 128, kernel_size=3, stride=2, padding=1),
+                             conv_block(128, 128, kernel_size=3, stride=2, padding=1),
+                             conv_block(128, 128, kernel_size=3, stride=1, padding=1),
+                             conv_block(128, 128, kernel_size=3, stride=1, padding=1))
 
     def get_classifier(self):
-        return nn.Sequential(MinkowskiLinear(2048, self.num_classes))
+        return nn.Sequential(nn.Linear(128, 128),
+                             #nn.BatchNorm1d(128),
+                             nn.LeakyReLU(),
+                             nn.Linear(128, self.num_classes))
 
     def data_augment_tiles_locations(self, tiles_locations):
         """
@@ -88,16 +108,20 @@ class XMIL(nn.Module):
         tiles_locations -= torch.min(tiles_locations, dim=0, keepdim=True)[0]
         return tiles_locations
 
-    def forward(self, x, tiles_original_locations, visualize=False):
+    def forward(self, x, tiles_original_locations):
 
         x = torch.concat(x)
         x = x.cuda()
+        
+        x = self.adapt_layer(x)
 
         if self.perf_aug:
-            tiles_locations = batched_coordinates([self.data_augment_tiles_locations(tl / self.sparse_map_downsample)
-                                                   for tl in tiles_original_locations])
+            tiles_locations = batched_coordinates(
+                [self.data_augment_tiles_locations(tl / self.sparse_map_downsample)
+                 for tl in tiles_original_locations])
         else:
-            tiles_locations = batched_coordinates([tl / self.sparse_map_downsample for tl in tiles_original_locations])
+            tiles_locations = batched_coordinates(
+                [tl / self.sparse_map_downsample for tl in tiles_original_locations])
 
         tiles_locations = tiles_locations.to(x.device)
 
@@ -105,13 +129,28 @@ class XMIL(nn.Module):
                                   coordinates=tiles_locations,
                                   quantization_mode=SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE)
 
-        sparse_map = self.adapt_layer(sparse_map)
-        sparse_map = self.sparse_model(sparse_map)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
+            dense_map = sparse_map.dense()[0]
 
-        if visualize:
-            self.sparse_map = sparse_map
+        if dense_map.shape[-1] < self.min_size[1] or dense_map.shape[-2] < self.min_size[0]:
+            pad = [max((self.min_size[1] - dense_map.shape[-1]) // 2, 0),
+                   max((self.min_size[1] - dense_map.shape[-1]) // 2 + 1, 0),
+                   max((self.min_size[0] - dense_map.shape[-2]) // 2, 0),
+                   max((self.min_size[0] - dense_map.shape[-2]) // 2 + 1, 0)]
 
-        result = self.pool_minkow(sparse_map)
-        result = self.classifier(result).F
+            dense_map = F.pad(dense_map, pad, mode='constant', value=0)
+        #dense_map = self.adapt_layer(dense_map)
+        dense_map = self.model(dense_map)
+        result = self.pool(dense_map)
+        result = result.view(result.size(0), result.size(1))
+        result = self.classifier(result)
 
-        return result, tiles_locations
+        if torch.isnan(result).any():
+            to_save = {"x": x.cpu(), "locations": tiles_locations.cpu(),
+                       "adapt_layer": self.adapt_layer.cpu(), "model": self.model.cpu()}
+            torch.save(to_save, "./debug_nan.pt")
+            print("NaN predictions")
+            exit()
+
+        return result, tiles_locations.cpu()
