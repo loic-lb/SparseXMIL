@@ -2,7 +2,7 @@
 
 This repository contains the code for the paper "SparseXMIL: Leveraging spatial context for the classification of pathology whole slide images".
 
-All the materials to reproduce the experiments are available in this [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EQwj3jTwIjhOq8mpo3ySqe4BhXNKKeELWOXQjEre1jnDrw?e=1R47RJ).
+All the materials to reproduce the experiments are available in this [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq).
 
 ## Installation
 
