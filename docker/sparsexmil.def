@@ -1,0 +1,44 @@
+Bootstrap: docker
+From: continuumio/miniconda3:24.1.2-0
+
+%environment
+    source /opt/etc/bashrc
+    export MPLCONFIGDIR=/tmp/matplotlib
+    export XDG_CACHE_HOME=/tmp/fontconfig
+
+%post
+    export TORCH_CUDA_ARCH_LIST="6.0 6.1 6.2 7.0 7.2 7.5 8.0 8.6"
+    export TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
+
+    apt-get update && \
+    apt-get install -y git cmake build-essential && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+    mkdir -p /opt/etc
+    conda create -y -n sparsexmil python=3.8
+    echo -e "#!/bin/bash\nsource /opt/conda/etc/profile.d/conda.sh\nconda activate sparsexmil" > /opt/etc/bashrc
+
+    . /opt/conda/etc/profile.d/conda.sh && conda activate sparsexmil
+
+    conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit=11.3 -c pytorch -c conda-forge -y
+    conda install openblas-devel==0.3.2 -c anaconda -y
+    conda install mkl==2021.4.0 -c conda-forge -y
+    conda install cudatoolkit-dev==11.3.1 -c conda-forge -y
+    conda install openslide==3.4.1 -c conda-forge -y
+
+    git clone --recursive https://github.com/shwoo93/MinkowskiEngine.git
+    cd MinkowskiEngine
+    python setup.py install --blas=openblas --force_cuda
+
+    pip install scikit-image==0.21.0 scikit-learn==1.2.2 pandas==2.0.2 h5py==3.8.0 \
+        opencv-python-headless==4.7.0.72 openslide-python==1.2.0 matplotlib==3.7.1 nystrom_attention==0.0.11
+    pip install --no-index --no-cache-dir torch-scatter torch-cluster -f https://data.pyg.org/whl/torch-1.10.1+cu113.html
+    pip install torch-geometric==2.4.0
+
+    cd ..
+    mkdir -p /SparseXMIL
+    chmod -R 775 $CONDA_PREFIX
+    mkdir -p /tmp/matplotlib
+    mkdir -p /tmp/fontconfig
+    chmod -R 777 /tmp/matplotlib /tmp/fontconfig

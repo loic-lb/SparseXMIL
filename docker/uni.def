@@ -1,0 +1,26 @@
+Bootstrap: docker
+From: continuumio/miniconda3:24.1.2-0
+
+%environment
+    source /opt/etc/bashrc
+    export MPLCONFIGDIR=/tmp/matplotlib
+    export XDG_CACHE_HOME=/tmp/fontconfig
+
+%post
+
+    mkdir -p /opt/etc
+    conda create -y -n uni_env python=3.8
+    echo -e "#!/bin/bash\nsource /opt/conda/etc/profile.d/conda.sh\nconda activate uni_env" > /opt/etc/bashrc
+
+    . /opt/conda/etc/profile.d/conda.sh && conda activate uni_env
+
+    conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 -c pytorch -c nvidia
+    conda install openslide -c conda-forge -y
+
+    pip install timm==0.9.8 pandas scikit-learn tqdm transformers openslide-python h5py
+
+    mkdir -p /SparseXMIL
+    chmod -R 775 $CONDA_PREFIX
+    mkdir -p /tmp/matplotlib
+    mkdir -p /tmp/fontconfig
+    chmod -R 777 /tmp/matplotlib /tmp/fontconfig

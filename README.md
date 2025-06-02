@@ -1,12 +1,42 @@
 # SparseXMIL
 
-This repository contains the code for the paper "SparseXMIL: Leveraging spatial context for the classification of pathology whole slide images".
+This repository contains the code for the paper "SparseXMIL: Leveraging spatial convolutions for context-aware and memory-efficient classification of whole slide images in digital pathology".
 
 All the materials to reproduce the experiments are available in this [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq).
 
+## Docker/Singularity
+
+A Dockerfile and Singularity recipe are available in the repository to help you set up the environment.
+You may build the Docker image with the following command:
+
+```
+docker build -t sparsexmil ./docker/
+```
+
+You may then run the Docker image with the following command:
+
+```
+docker run --gpus all -it -v $(pwd):/SparseXMIL sparsexmil
+```
+
+Alernatively, you may build the Singularity image with the following command:
+
+```
+singularity build sparsexmil.sif ./docker/sparsexmil.def
+```
+
+You may then run the Singularity image with the following command:
+
+```
+singularity run --no-home --nv -B $(pwd):/SparseXMIL sparsexmil.sif
+```
+
 ## Installation
 
-The following instructions have been tested with cuda 11.3 on an NVIDIA A6000 GPU with conda. For other versions, you may need to adapt the installation instructions. You may see [here](https://github.com/shwoo93/MinkowskiEngine/tree/bbc30ef581ea6deb505976b663f5fc2358a83749) for more details on MinkowskiEngine installation with other cuda versions.
+The following instructions have been tested with cuda 11.3 on an NVIDIA A6000 GPU with conda. For other versions, you
+may need to adapt the installation instructions (see [here](https://github.com/shwoo93/MinkowskiEngine/tree/bbc30ef581ea6deb505976b663f5fc2358a83749) for more details on MinkowskiEngine installation with 
+other cuda versions).
+
 To set up the environnement, we recommend using conda. You may install then the dependencies with the following commands:
 
 First start by creating a conda environnement:
@@ -19,8 +49,8 @@ conda activate sparsexmil
 Then install pytorch, openblas and cudatoolkit:
 
 ```
-conda install openblas-devel==0.3.2 -c anaconda -y
 conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit=11.3 -c pytorch -c conda-forge
+conda install openblas-devel==0.3.2 -c anaconda
 conda install cudatoolkit-dev==11.3.1 -c conda-forge
 ```
 
@@ -76,7 +106,7 @@ The data used in this paper all come from the [TCGA database](https://portal.gdc
 and [TCGA-KICH](https://portal.gdc.cancer.gov/projects/TCGA-KICH) projects.
 
 To get a precise listing of the slide used in each experiment, you may refer to the corresponding _dataset.csv_ files 
-in the [onedrive repository](http).
+in the [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq).
 
 ## Preprocessing
 
@@ -112,6 +142,8 @@ python ./training.py ---experiment_folder <path_to_experiment_folder> --experime
 
 The `--model` argument can take the following values:
 * "xmil": for the SparseXMIL model
+* "dense_xmil": for using Neural Image Compression with Xception architecture (same as SparseXMIL but with a dense architecture)
+* "nic": for using Neural Image Compression with the architecture proposed in the paper
 * "transmil": for the TransMIL model
 * "dgcn": for the GCN-MIL model
 * "sparseconvmil": for the SparseConvMIL model
@@ -192,11 +224,14 @@ If you find this code useful in your research then please cite:
 
 ```
 @unpublished{lebescond:hal-04531177,
-  TITLE = {{SparseXMIL: Leveraging spatial context for classifying whole slide images in digital pathology}},
+  TITLE = {{SparseXMIL: Leveraging sparse convolutions for context-aware and memory-efficient classification of whole slide images in digital pathology}},
   AUTHOR = {Le Bescond, Lo{\"i}c and Lerousseau, Marvin and Andre, Fabrice and Talbot, Hugues},
   URL = {https://hal.science/hal-04531177},
-  YEAR = {2024},
-  MONTH = Apr,
+  YEAR = {2025},
+  MONTH = Jan,
+  KEYWORDS = {Multiple Instance Learning ; Convolutional Neural Networks ; Computational Pathology ; Resource Efficient},
+  HAL_ID = {hal-04531177},
+  HAL_VERSION = {v2},
 }
 ```
 
