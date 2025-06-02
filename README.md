@@ -150,9 +150,14 @@ The `--model` argument can take the following values:
 *  "attention": for the Attention-MIL model
 *  "average": for the Average-MIL model
 
-A script to train all the experiments is available in the `scripts` folder. In the paper, when we refer to the 
-"second training setting", it corresponds to setting batch_size to 1, perc_tiles_per_wsi to 0, and removing the
---test_time_augmentation argument.
+A script to train all the experiments is available in the `scripts` folder. 
+
+In the paper, when we refer to the "second training setting", it corresponds to setting:
+* `--perc_tiles_per_wsi` to 0
+* `--batch_size` to 1
+* and removing `--test_time_augmentation`
+
+For the ablation study, you may use the `--remove_perf_image_aug` to train SparseXMIL without the spatial augmentations.
 
 For additional information on the arguments, you may refer to the `training.py` file.
 
@@ -167,14 +172,20 @@ python ./testing.py --experiment_folder <path_to_folder_with_experiments> --expe
     --test_time_augmentation
 ```
 
-The argument share the same meaning as for the training script. For the "second training setting", you ay also set 
-perc_tiles_per_wsi to 0, the batch_size to 1, and remove the --test_time_augmentation argument.
+The argument share the same meaning as for the training script. 
+
+For the "second training setting", you may also set:
+* `--perc_tiles_per_wsi` to 0
+* `--batch_size` to 1
+* and remove `--test_time_augmentation`
 
 To run sensitivity experiments, you may use the following arguments:
 
 * `--shuffle_locations` to enable the shuffling of the patch locations
 * `--shuffle_mode` which can be set either to "idx" to shuffle the patch locations by index or to "absolute_positions" 
 to assign random coordinates to the patches
+
+For the ablation study, you may use the `--remove_perf_image_aug` to test SparseXMIL without the spatial augmentations.
 
 A script to evaluate all the experiments is available in the `scripts` folder.
 
