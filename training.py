@@ -1,5 +1,4 @@
 import argparse
-import comet_ml
 import os
 import time
 import numpy as np
@@ -16,7 +15,7 @@ from models.model_sparseconvmil import SparseConvMIL
 from models.model_xmil import XMIL
 from models.model_xmil_dense import DenseXMIL
 from models.model_nic import NIC
-from utils import get_dataloader, create_illustrations, apply_random_seed, split_dataset, measure_perf
+from utils import get_dataloader, apply_random_seed, split_dataset, measure_perf
 from models.model_utils import ModelEmaV2
 
 from pathlib import Path
@@ -84,7 +83,6 @@ def _define_args():
 
     args = parser.parse_args()
 
-    experiment.set_name(f"{args.experiment_name}: Split {args.split_id}")  # Comment this line when not using comet.ml
     experiment_path = os.path.join(args.experiment_folder, args.experiment_name, f"Split {args.split_id}")
     Path(experiment_path).mkdir(parents=True, exist_ok=True)
 
@@ -131,8 +129,6 @@ def perform_epoch(mil_model, mil_model_ema, dataloader, optimizer, loss_function
     ground_truths = []
     losses = []
 
-    # Boolean to set to True to plot sparse maps
-    example_plot = True
     start_time = time.time()
     for data, locations, slides_labels, slides_ids in dataloader:
         slides_labels = slides_labels.cuda()
