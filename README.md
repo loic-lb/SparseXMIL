@@ -1,8 +1,8 @@
 # SparseXMIL
 
-This repository contains the code for the paper "SparseXMIL: Leveraging spatial convolutions for context-aware and memory-efficient classification of whole slide images in digital pathology".
+This repository contains the code for the paper "SparseXMIL: Leveraging spatial convolutions for context-aware and memory-efficient classification of whole slide images in digital pathology" ([link to the preprint](https://hal.science/hal-04531177v2)).
 
-All the materials to reproduce the experiments are available in this [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq).
+For your convenience, materials to reproduce the experiments (extracted patches, trained models, etc.) are made available in this [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq).
 
 ## Docker/Singularity
 
@@ -106,7 +106,7 @@ The data used in this paper all come from the [TCGA database](https://portal.gdc
 and [TCGA-KICH](https://portal.gdc.cancer.gov/projects/TCGA-KICH) projects.
 
 To get a precise listing of the slide used in each experiment, you may refer to the corresponding _dataset.csv_ files 
-in the [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq).
+in the [dataset](dataset) folder.
 
 ## Preprocessing
 
@@ -118,8 +118,6 @@ To extract the patches from the slides, you may run the following command:
 python ./tile_extraction/create_patches_fp.py --source <path_to_slides> --save_dir <path_to_save_dir> \
 --dataset <path_to_csv_dataset_file> --extension .svs --patch --seg --stitch 
 ```
-
-For convenience, the patches extracted for each experiment are available in the [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq).
 
 To extract features vector from patch coordinates, you may run the following command:
 
@@ -209,10 +207,10 @@ used the second training setting for the interpretation of these models.
 
 The argument `--annotated_data` is used to specify the csv file containing the id of the slides for the interpretation
 experiments (to avoid running the interpretation experiments on all the slides). The csv file is available in the
-[onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq). The argument `--save_heatmaps` is used to save the heatmaps produced by the interpretation 
-experiments as .npy files, and the argument `--save_mask_contours` similarly saves the mask of the tissue for 
-each slide (both are necessary to run the evaluation script). 
-You may remove these arguments when evaluation is not needed to save disk space. 
+[dataset](dataset/BRCA/subtyping/) folder. The argument `--save_heatmaps` is used to save the heatmaps produced by the interpretation
+experiments as .npy files, and the argument `--save_mask_contours` similarly saves the mask of the tissue for
+each slide (both are necessary to run the evaluation script).
+You may remove these arguments when evaluation is not needed to save disk space.
 
 You may now evaluate the interpretation experiments by running the following command:
 
@@ -247,4 +245,4 @@ If you find this code useful in your research then please cite:
 ```
 
 ## License
-XMIL is GNU AGPLv3 licensed, as found in the LICENSE file.
+SparseXMIL is GNU AGPLv3 licensed, as found in the LICENSE file.
