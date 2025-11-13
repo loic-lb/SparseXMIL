@@ -251,6 +251,7 @@ def main(hyper_parameters):
     val_perfs = []
 
     for epoch in range(hyper_parameters["epochs"]):
+        model.train()
         train_losses, train_probas, \
             train_ground_truths, train_predicted_classes, train_time = perform_epoch(model, model_ema,
                                                                                      train_dataloader, optimizer,
