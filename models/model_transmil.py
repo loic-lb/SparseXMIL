@@ -49,12 +49,14 @@ class PPEG(nn.Module):
 
 
 class TransMIL(nn.Module):
-    def __init__(self, n_classes, transmil_size=512):
+    def __init__(self, nb_layers_in, n_classes, transmil_size=512, perf_aug=False):
         super(TransMIL, self).__init__()
         self.name = "TransMIL"
         self.transmil_size = transmil_size
+        self.perf_aug = perf_aug
+        self.nb_layers_in = nb_layers_in
         self.pos_layer = PPEG(dim=transmil_size)
-        self._fc1 = nn.Sequential(nn.Linear(1024, self.transmil_size), nn.ReLU()) #512
+        self._fc1 = nn.Sequential(nn.Linear(nb_layers_in, self.transmil_size), nn.ReLU()) #512
         self.cls_token = nn.Parameter(torch.randn(1, 1, self.transmil_size))
         self.n_classes = n_classes
         self.layer1 = TransLayer(dim=self.transmil_size)
@@ -68,6 +70,8 @@ class TransMIL(nn.Module):
             attention_weights = []
         for x in data:
 
+            if self.perf_aug:
+                x = x[torch.randperm(x.size(0))]
             x = x.cuda().unsqueeze(0)  # [B, n, 1024]
 
             h = self._fc1(x)  # [B, n, 512]

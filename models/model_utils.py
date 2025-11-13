@@ -35,9 +35,9 @@ class ModelEmaV2(nn.Module):
         elif model_type == "attention":
             model_fct = GatedAttention(model.nb_layers_in, model.n_classes)
         elif model_type == "transmil":
-            model_fct = TransMIL(model.n_classes, model.transmil_size)
+            model_fct = TransMIL(model.nb_layers_in, model.n_classes, model.transmil_size, perf_aug=perf_aug)
         elif model_type == "dgcn":
-            model_fct = DGCNMIL(num_features=model.num_features, n_classes=model.n_classes)
+            model_fct = DGCNMIL(num_features=model.num_features, n_classes=model.n_classes, perf_aug=perf_aug)
         elif model_type == "sparseconvmil":
             model_fct = SparseConvMIL(model.nb_layers_in, sparse_map_downsample=model.sparse_map_downsample,
                                       perf_aug=perf_aug, num_classes=model.num_classes)
@@ -49,7 +49,7 @@ class ModelEmaV2(nn.Module):
                            num_classes=model.num_classes, perf_aug=perf_aug)
         else:
             model_fct = XMIL(nb_layers_in=model.nb_layers_in, sparse_map_downsample=model.sparse_map_downsample,
-                             D=model.D, num_classes=model.num_classes, perf_aug=perf_aug)
+                             D=model.D, num_classes=model.num_classes, perf_aug=perf_aug, norm_layer=model.norm_layer)
         return model_fct
 
     def _update(self, model, update_fn):

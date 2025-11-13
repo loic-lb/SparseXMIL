@@ -15,7 +15,7 @@ from models.model_sparseconvmil import SparseConvMIL
 from models.model_xmil import XMIL
 from models.model_xmil_dense import DenseXMIL
 from models.model_nic import NIC
-from utils import get_dataloader, apply_random_seed, split_dataset, measure_perf
+from utils import get_dataloader, apply_random_seed, split_dataset, measure_perf, save_model
 from models.model_utils import ModelEmaV2
 
 from pathlib import Path
@@ -53,6 +53,8 @@ def _define_args():
                                                                               'validation')
     parser.add_argument('--test_time_augmentation_times', type=int, default=10, metavar='N',
                         help='number of test time augmentation iterations')
+    parser.add_argument('--criteria', type=str, default='auc', choices=['auc', 'loss'],
+                        help='criteria to use for saving model')
 
     # Model parameters
     parser.add_argument('--model', type=str, choices=["attention", "xmil",
@@ -66,7 +68,14 @@ def _define_args():
     parser.add_argument('--transmil_size', type=int, default=512, choices=[256, 512],
                         metavar='SIZE', help='size of the TransMIL layers')
     parser.add_argument('--sparse-map-downsample', type=int, default=10, help='downsampling factor of the sparse map')
-    parser.add_argument('--remove_perf_image_aug', action="store_false", help='remove image augmentation during training')
+    parser.add_argument('--remove_perf_image_aug', action="store_false", help='remove image augmentation')
+    parser.add_argument('--perf_graph_aug', action="store_true", help='perform graph augmentation')
+    parser.add_argument('--perf_transf_aug', action="store_true",
+                        help='perform transformation augmentation')
+    parser.add_argument('--norm_layer', type=str, default='batch', choices=['batch', 'instance', 'hybrid', 'hybrid_only_end'],
+                        help='normalization layer to use for XMIL')
+    parser.add_argument('--feats_type', type=str, default='resnet_IN', choices=['resnet_IN', 'other'],
+                        help='specify other when using tile embedder other than truncated resnet pretrained on ImageNet')
 
     # Dataset parameters
     parser.add_argument('--split', type=str, default=None, help="path to predetermined splitting of dataset")
@@ -78,7 +87,8 @@ def _define_args():
                         help='tile size')
 
     # Miscellaneous parameters
-    parser.add_argument('--j', type=int, default=10, metavar='N_WORKERS', help='number of workers for dataloader')
+    parser.add_argument('--j', type=int, default=10, metavar='N_WORKERS',
+                        help='number of workers for dataloader, for reproducibility please set to >0')
     parser.add_argument('--seed', type=int, default=512, metavar='SEED', help='seed for reproducible experiments')
 
     args = parser.parse_args()
@@ -102,6 +112,8 @@ def _define_args():
         'split': args.split,
         'sparse_map_downsample': args.sparse_map_downsample,
         'perf_image_aug': args.remove_perf_image_aug,
+        'perf_graph_aug': args.perf_graph_aug,
+        'perf_transf_aug': args.perf_transf_aug,
         'batch_size': args.batch_size,
         'clip': args.clip,
         'n_tiles_per_wsi': args.n_tiles_per_wsi,
@@ -109,6 +121,9 @@ def _define_args():
         'j': args.j,
         'optimizer': args.optimizer,
         'seed': args.seed,
+        'criteria': args.criteria,
+        'norm_layer': args.norm_layer,
+        'feats_type': args.feats_type,
     }
 
     return hyper_parameters
@@ -207,29 +222,37 @@ def main(hyper_parameters):
 
     # Loads MIL model, optimizer and loss function
     print('Loading model')
+    if hyper_parameters["feats_type"] == "resnet_IN":
+        feat_dim = 1024
+    else:
+        feat_dim = train_dataset[0][0].shape[1]
     if hyper_parameters['model'] == 'attention':
-        model = GatedAttention(1024, n_classes).cuda()
+        model = GatedAttention(feat_dim, n_classes).cuda()
     elif hyper_parameters['model'] == 'transmil':
-        model = TransMIL(n_classes, hyper_parameters["transmil_size"]).cuda()
+        model = TransMIL(feat_dim, n_classes, hyper_parameters["transmil_size"],
+                         perf_aug=hyper_parameters["perf_transf_aug"]).cuda()
     elif hyper_parameters['model'] == 'average':
-        model = AverageMIL(1024, n_classes).cuda()
+        model = AverageMIL(feat_dim, n_classes).cuda()
     elif hyper_parameters['model'] == 'dgcn':
-        model = DGCNMIL(num_features=1024, n_classes=n_classes).cuda()
+        model = DGCNMIL(num_features=feat_dim, n_classes=n_classes, perf_aug=hyper_parameters['perf_graph_aug']).cuda()
     elif hyper_parameters['model'] == 'sparseconvmil':
-        model = SparseConvMIL(1024, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
+        model = SparseConvMIL(feat_dim, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
                               perf_aug=hyper_parameters['perf_image_aug'], num_classes=n_classes).cuda()
     elif hyper_parameters['model'] == 'dense_xmil':
-        model = DenseXMIL(1024, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
+        model = DenseXMIL(feat_dim, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
                           num_classes=n_classes, perf_aug=hyper_parameters['perf_image_aug']).cuda()
     elif hyper_parameters['model'] == 'nic':
-        model = NIC(1024, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
+        model = NIC(feat_dim, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
                     num_classes=n_classes, perf_aug=hyper_parameters['perf_image_aug']).cuda()
     else:
-        model = XMIL(1024, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
-                     num_classes=n_classes, perf_aug=hyper_parameters['perf_image_aug']).cuda()
+        model = XMIL(feat_dim, sparse_map_downsample=hyper_parameters['sparse_map_downsample'],
+                     num_classes=n_classes, perf_aug=hyper_parameters['perf_image_aug'],
+                     norm_layer=hyper_parameters["norm_layer"]).cuda()
 
     # Create EMA version of the model
-    model_ema = ModelEmaV2(model, hyper_parameters['model'], perf_aug=hyper_parameters['TTA'] and hyper_parameters['perf_image_aug'], decay=0.99,
+    model_ema = ModelEmaV2(model, hyper_parameters['model'],
+                           perf_aug=hyper_parameters['TTA'] and model.perf_aug,
+                           decay=0.99,
                            device="cuda")
 
     print('  done')
@@ -246,7 +269,7 @@ def main(hyper_parameters):
 
     # Loop through all epochs
     print('Starting training...')
-    best_val_auc = 0
+    best_val = 0 if hyper_parameters['criteria'] == 'auc' else float('inf')
     save_every = 10 if hyper_parameters['model'] == 'average' else 1  # Save every 10 epochs for average model
     val_perfs = []
 
@@ -254,15 +277,16 @@ def main(hyper_parameters):
         model.train()
         train_losses, train_probas, \
             train_ground_truths, train_predicted_classes, train_time = perform_epoch(model, model_ema,
-                                                                                     train_dataloader, optimizer,
-                                                                                     loss_function,
-                                                                                     clip=hyper_parameters['clip'])
+                                                                                        train_dataloader, optimizer,
+                                                                                        loss_function,
+                                                                                        clip=hyper_parameters['clip'])
 
         train_loss, train_bac, train_f1, train_auc = measure_perf(train_losses, train_ground_truths,
-                                                                  train_predicted_classes, train_probas,
-                                                                  n_classes)
+                                                                    train_predicted_classes, train_probas,
+                                                                    n_classes)
+
         print('Epoch', f'{epoch:3d}/{hyper_parameters["epochs"]}', f'    train_loss={train_loss:.3f}',
-              f'    train_bac={train_bac:.3f}', f'    train_f1={train_f1:.3f}', f'    train_auc={train_auc:.3f}')
+                f'    train_bac={train_bac:.3f}', f'    train_f1={train_f1:.3f}', f'    train_auc={train_auc:.3f}')
         model.eval()
 
         nb_repeat = hyper_parameters['TTA_times'] if hyper_parameters['TTA'] else 1
@@ -274,13 +298,13 @@ def main(hyper_parameters):
 
             val_losses, val_probas, \
                 val_ground_truths, val_predicted_classes, val_time = perform_epoch(model,
-                                                                                   model_ema,
-                                                                                   val_dataloader, optimizer,
-                                                                                   loss_function, train=False)
+                                                                                    model_ema,
+                                                                                    val_dataloader, optimizer,
+                                                                                    loss_function, train=False)
             # Keep track of the performance for each TTA iteration
             val_loss, val_bac, val_f1, val_auc = measure_perf(val_losses, val_ground_truths,
-                                                              val_predicted_classes, val_probas,
-                                                              n_classes)
+                                                                val_predicted_classes, val_probas,
+                                                                n_classes)
 
             # Check that the ground truths are the same for each test time augmentation (TTA) iteration
             if sampling_id == 0:
@@ -290,7 +314,7 @@ def main(hyper_parameters):
 
             val_perfs.append(
                 {'epoch': epoch, 'sampling_id': sampling_id, 'val_loss': val_loss, 'val_bac': val_bac,
-                 'val_f1': val_f1, 'val_auc': val_auc})
+                    'val_f1': val_f1, 'val_auc': val_auc})
             val_loss_avg.append(val_loss)
             val_probas_avg.append(val_probas)
 
@@ -300,29 +324,19 @@ def main(hyper_parameters):
         val_predicted_classes_avg = np.argmax(val_probas_avg, axis=1)
 
         val_loss, val_bac, val_f1, val_auc = measure_perf(val_loss_avg, val_ground_truths,
-                                                          val_predicted_classes_avg, val_probas_avg,
-                                                          n_classes)
+                                                            val_predicted_classes_avg, val_probas_avg,
+                                                            n_classes)
 
         print('Epoch', f'{epoch:3d}/{hyper_parameters["epochs"]}', f'    val_loss={val_loss:.3f}',
-              f'    val_bac {val_bac:.3f}', f'    val_f1={val_f1:.3f}', f'    val_auc={val_auc:.3f}')
+                f'    val_bac {val_bac:.3f}', f'    val_f1={val_f1:.3f}', f'    val_auc={val_auc:.3f}')
 
         # Save model if best performing model on val dataset
-        if (best_val_auc < val_auc) and (epoch % save_every == 0):
-            print("New best performing model on val dataset, saving model....")
-            checkpoint = {
-                'model': model_ema.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'settings': hyper_parameters,
-                'epoch': epoch,
-            }
-            torch.save(checkpoint,
-                       f"./{hyper_parameters['experiment_path']}/model_{epoch}.pt")
-            best_val_auc = val_auc
-            print(f"New best val auc:{best_val_auc}")
+        val = val_auc if hyper_parameters['criteria'] == 'auc' else val_loss
+        best_val = save_model(model_ema, optimizer, hyper_parameters, epoch, val, best_val, save_every)
 
     # Save val results to csv file to check difference between TTA iterations
     df = pd.DataFrame(val_perfs)
-    df.to_csv(f"./{hyper_parameters['experiment_path']}/val_results.csv", index=False)
+    df.to_csv(os.path.join(hyper_parameters['experiment_path'], "val_results.csv"), index=False)
 
 
 print('  done')

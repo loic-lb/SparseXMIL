@@ -6,6 +6,7 @@ import torch.nn as nn
 from MinkowskiEngine import (MinkowskiGlobalAvgPooling,
                              MinkowskiLinear,
                              MinkowskiReLU,
+                             MinkowskiInstanceNorm,
                              SparseTensor)
 
 from MinkowskiEngine import SparseTensorQuantizationMode
@@ -17,7 +18,7 @@ from models.model_xception_sparse import sparsexception
 class XMIL(nn.Module):
     def __init__(self, nb_layers_in, sparse_map_downsample, perf_aug, num_classes, D=2,
                  tile_coordinates_rotation_augmentation=True, tile_coordinates_flips_augmentation=True,
-                 tile_coordinates_resize_augmentation=True):
+                 tile_coordinates_resize_augmentation=True, norm_layer="batch"):
         super(XMIL, self).__init__()
 
         self.name = "Sparse_XMIL"
@@ -29,10 +30,11 @@ class XMIL(nn.Module):
         self.tile_coordinates_rotation_augmentation = tile_coordinates_rotation_augmentation
         self.tile_coordinates_flips_augmentation = tile_coordinates_flips_augmentation
         self.tile_coordinates_resize_augmentation = tile_coordinates_resize_augmentation
+        self.norm_layer = norm_layer
 
         self.adapt_layer = self.get_adapt_layer()
 
-        self.sparse_model = sparsexception(D=self.D)
+        self.sparse_model = sparsexception(D=self.D, norm_layer=self.norm_layer)
 
         self.pool_minkow = MinkowskiGlobalAvgPooling()
 
