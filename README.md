@@ -104,6 +104,8 @@ The data used in this paper all come from the [TCGA database](https://portal.gdc
 * For KIDNEY, we used the data from the [TCGA-KIRC](https://portal.gdc.cancer.gov/projects/TCGA-KIRC), 
 [TCGA-KIRP](https://portal.gdc.cancer.gov/projects/TCGA-KIRP),
 and [TCGA-KICH](https://portal.gdc.cancer.gov/projects/TCGA-KICH) projects.
+* For BRACS, we used the data from [https://www.bracs.icar.cnr.it/](BRACS). Please refer to the website guidelines
+to retrieve the slides and their corresponding labels.
 
 To get a precise listing of the slide used in each experiment, you may refer to the corresponding _dataset.csv_ files 
 in the [dataset](dataset) folder.
@@ -125,6 +127,8 @@ To extract features vector from patch coordinates, you may run the following com
 python ./tile_extraction/extract_features_fp.py ./extract_features_fp.py --data_h5_dir <path_to_h5_files> \
  --data_slide_dir <path_to_slides> --slide_ext .svs --csv_path <path_to_csv_file> --feat_dir <path_to_feat_dir>
 ```
+
+To extract CONCH embeddings, please refer to the [official repository instructions](https://github.com/mahmoodlab/CONCH).
 
 ## Training
 
@@ -155,7 +159,9 @@ In the paper, when we refer to the "second training setting", it corresponds to 
 * `--batch_size` to 1
 * and removing `--test_time_augmentation`
 
-For the ablation study, you may use the `--remove_perf_image_aug` to train SparseXMIL without the spatial augmentations.
+For the ablation study, you may use the `--remove_perf_image_aug` to train SparseXMIL without the spatial augmentations, `--perf_graph_aug` to train GCN-MIL with edge dropout and `--perf_transf_aug` to train TransMIL with patch order shuffling.
+
+For reproducing the experiments using CONCH, please set `--feats_type` to `other`, and, when training "xmil", `--norm_layer` to `hybrid_only_end`.
 
 For additional information on the arguments, you may refer to the `training.py` file.
 
@@ -183,7 +189,9 @@ To run sensitivity experiments, you may use the following arguments:
 * `--shuffle_mode` which can be set either to "idx" to shuffle the patch locations by index or to "absolute_positions" 
 to assign random coordinates to the patches
 
-For the ablation study, you may use the `--remove_perf_image_aug` to test SparseXMIL without the spatial augmentations.
+For the ablation study, you may use the `--remove_perf_image_aug` to test SparseXMIL without the spatial augmentations, `--perf_graph_aug` to test GCN-MIL with edge dropout and `--perf_transf_aug` to test TransMIL with patch order shuffling.
+
+For reproducing the experiments using CONCH, please set `--feats_type` to `other`, and, when testing "xmil", `--norm_layer` to `hybrid_only_end`.
 
 A script to evaluate all the experiments is available in the `scripts` folder.
 
