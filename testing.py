@@ -103,7 +103,7 @@ def main():
 
         print(f"Processing split {split_id}")
 
-        split_csv = pd.read_csv(os.path.join(args.split_folder, f"splits_{split_id}.csv"))
+        split_csv = pd.read_csv(os.path.join(args.split_folder, f"split_{split_id}.csv"))
         test_indices = np.nonzero(np.in1d(test_dataset.slides_ids, split_csv.test.values))[0]
         test_dataset_split = torch.utils.data.Subset(test_dataset, test_indices)
         print(len(test_dataset_split))
