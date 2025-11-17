@@ -85,7 +85,7 @@ def main():
     split_ids = [args.split_id] if args.split_id else range(10)
     for split_id in split_ids:
 
-        output_folder = os.path.join(args.experiment_folder, args.experiment_name, "interpretation_bis",
+        output_folder = os.path.join(args.experiment_folder, args.experiment_name, "interpretation",
                                      f"Split {split_id}")
         Path(output_folder).mkdir(parents=True, exist_ok=True)
 

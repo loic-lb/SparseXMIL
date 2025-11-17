@@ -99,7 +99,7 @@ def main():
     split_id = 0
     print(f"Processing split {split_id}")
 
-    split_csv = pd.read_csv(os.path.join("./BRCA", f"splits_{split_id}.csv"))
+    split_csv = pd.read_csv(os.path.join("./BRCA", f"split_{split_id}.csv"))
     if args.training:
         indices = np.nonzero(np.in1d(test_dataset.slides_ids, split_csv.train.values))[0]
     else:
