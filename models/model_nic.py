@@ -46,7 +46,7 @@ class NIC(nn.Module):
         self.classifier = self.get_classifier()
 
     def get_adapt_layer(self):
-        return nn.Sequential(nn.Linear(1024, 128), nn.ReLU())
+        return nn.Sequential(nn.Linear(self.nb_layers_in, 128), nn.ReLU())
 
     def create_model(self):
         return nn.Sequential(conv_block(128, 128, kernel_size=3, stride=2, padding=1),
@@ -60,7 +60,7 @@ class NIC(nn.Module):
 
     def get_classifier(self):
         return nn.Sequential(nn.Linear(128, 128),
-                             #nn.BatchNorm1d(128),
+                             nn.BatchNorm1d(128),
                              nn.LeakyReLU(),
                              nn.Linear(128, self.num_classes))
 

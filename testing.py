@@ -34,8 +34,12 @@ def main():
                         help='path to folder containing features extracted from patches')
     parser.add_argument('--slides_label_filepath', type=str, default='./dataset.csv', metavar='PATH',
                         help='path to CSV-file containing slide labels')
+    parser.add_argument("--split_folder", type=str, metavar='PATH',
+                        help='path to folder containing splits')
 
     # Evaluation parameters
+    parser.add_argument("--n_splits", type=int, default=10, metavar='N',
+                        help='number of splits for cross-validation')
     parser.add_argument('--batch_size', type=int, default=16, metavar='SIZE',
                         help='number of slides sampled per iteration')
     parser.add_argument('--test_time_augmentation', action='store_true', default=False,
@@ -43,16 +47,20 @@ def main():
     parser.add_argument('--test_time_augmentation_times', type=int, default=10, metavar='N',
                         help='number of test time augmentation iterations')
     parser.add_argument('--use_ema', action="store_true", help='exponential moving average used during training')
-    parser.add_argument('--remove_perf_image_aug', action="store_false", help='remove image augmentation during training')
+    parser.add_argument('--remove_perf_image_aug', action="store_false", help='remove image augmentation')
+    parser.add_argument('--perf_graph_aug', action="store_true", help='perform graph augmentation')
+    parser.add_argument('--perf_transf_aug', action="store_true",
+                        help='perform transformation augmentation')
 
     # Model parameters
     parser.add_argument('--model', type=str, choices=["attention", "xmil",
                                                       "transmil", "average", "sparseconvmil",
                                                       "dgcn", "dense_xmil", "nic"],
-                        default='xception', metavar='MODEL', help='model name')
+                        default='xmil', metavar='MODEL', help='model name')
     parser.add_argument('--transmil_size', type=int, default=512, metavar='SIZE', help='size of the TransMIL layers')
     parser.add_argument('--sparse-map-downsample', type=int, default=256, help='downsampling factor of the sparse map')
-
+    parser.add_argument('--norm_layer', type=str, default="batch", choices=["batch", "instance", "hybrid", "hybrid_only_end"],
+                        help='normalization layer to use for XMIL')
     # Dataset parameters
     parser.add_argument('--n-tiles-per-wsi', type=int, default=0, metavar='SIZE',
                         help='number of tiles to be sampled per WSI')
@@ -60,6 +68,10 @@ def main():
                         help='percentage of tiles to be sampled per WSI')
     parser.add_argument('--tile_size', type=int, default=256, metavar='TILESIZE',
                         help='tile size')
+    parser.add_argument('--sort_tiles', action="store_true",
+                        help='sort tiles when sampling (to active when using TransMIL)')
+    parser.add_argument('--feats_type', type=str, default='resnet_IN', choices=['resnet_IN', 'other'],
+                        help='specify other when using tile embedder other than truncated resnet pretrained on ImageNet')
 
     # Sensitivity analysis parameters
     parser.add_argument('--shuffle_locations', action='store_true', default=False, help='Shuffle locations')
@@ -67,7 +79,8 @@ def main():
                         help='Shuffle mode')
 
     # Miscellaneous parameters
-    parser.add_argument('--j', type=int, default=10, metavar='N_WORKERS', help='number of workers for dataloader')
+    parser.add_argument('--j', type=int, default=10, metavar='N_WORKERS',
+                        help='number of workers for dataloader, for reproducibility please set to >0')
     parser.add_argument('--seed', type=int, default=512, metavar='SEED', help='seed for reproducible experiments')
 
     args = parser.parse_args()
@@ -82,15 +95,15 @@ def main():
     print(test_dataset.correspondence_digit_label_name)
     n_classes = test_dataset.n_classes
 
-    results_dict = {'Model': args.model}
+    results_dict = {'Model': [], "AUC": [], "MCC": [], "F1_macro": []}
     # Loops over the splits (assuming 10-fold cross-validation)
-    for split_id in range(10):
+    for split_id in range(args.n_splits):
 
         apply_random_seed(args.seed)
 
         print(f"Processing split {split_id}")
 
-        split_csv = pd.read_csv(os.path.join(args.experiment_folder, "splits", f"split_{split_id}.csv"))
+        split_csv = pd.read_csv(os.path.join(args.split_folder, f"split_{split_id}.csv"))
         test_indices = np.nonzero(np.in1d(test_dataset.slides_ids, split_csv.test.values))[0]
         test_dataset_split = torch.utils.data.Subset(test_dataset, test_indices)
         print(len(test_dataset_split))
@@ -103,33 +116,42 @@ def main():
 
         # Loads MIL model, optimizer and loss function
         print('Loading model')
-        perf_aug = args.test_time_augmentation and args.remove_perf_image_aug
-
+        if args.feats_type == 'resnet_IN':
+            feat_dim = 1024
+        else:
+            feat_dim = test_dataset[0][0].shape[1]
         if args.model == 'attention':
-            model = GatedAttention(1024, n_classes).cuda()
-        elif args.model == 'transmil':
-            model = TransMIL(n_classes, args.transmil_size).cuda()
+            model = GatedAttention(feat_dim, n_classes).cuda()
         elif args.model == 'average':
-            model = AverageMIL(1024, n_classes).cuda()
+            model = AverageMIL(feat_dim, n_classes).cuda()
+        elif args.model == 'transmil':
+            model = TransMIL(feat_dim, n_classes, args.transmil_size,
+                             perf_aug=args.test_time_augmentation and args.perf_transf_aug).cuda()
         elif args.model == 'dgcn':
-            model = DGCNMIL(num_features=1024, n_classes=n_classes).cuda()
+            model = DGCNMIL(num_features=feat_dim, n_classes=n_classes,
+                            perf_aug=args.test_time_augmentation and args.perf_graph_aug).cuda()
         elif args.model == 'sparseconvmil':
-            model = SparseConvMIL(1024, sparse_map_downsample=args.sparse_map_downsample,
-                                  perf_aug=perf_aug, num_classes=n_classes).cuda()
+            model = SparseConvMIL(feat_dim, sparse_map_downsample=args.sparse_map_downsample,
+                                  perf_aug=args.test_time_augmentation and args.remove_perf_image_aug,
+                                  num_classes=n_classes).cuda()
         elif args.model == "dense_xmil":
-            model = DenseXMIL(1024, sparse_map_downsample=args.sparse_map_downsample,
-                           num_classes=n_classes, perf_aug=perf_aug).cuda()
+            model = DenseXMIL(feat_dim, sparse_map_downsample=args.sparse_map_downsample,
+                              num_classes=n_classes,
+                              perf_aug=args.test_time_augmentation and args.remove_perf_image_aug).cuda()
         elif args.model == "nic":
-            model = NIC(1024, sparse_map_downsample=args.sparse_map_downsample,
-                           num_classes=n_classes, perf_aug=perf_aug).cuda()
+            model = NIC(feat_dim, sparse_map_downsample=args.sparse_map_downsample,
+                        num_classes=n_classes,
+                        perf_aug=args.test_time_augmentation and args.remove_perf_image_aug).cuda()
         elif args.model == "xmil":
-            model = XMIL(nb_layers_in=1024, sparse_map_downsample=args.sparse_map_downsample,
-                         num_classes=n_classes, perf_aug=perf_aug).cuda()
+            model = XMIL(nb_layers_in=feat_dim, sparse_map_downsample=args.sparse_map_downsample,
+                         num_classes=n_classes,
+                         perf_aug=args.test_time_augmentation and args.remove_perf_image_aug,
+                         norm_layer=args.norm_layer).cuda()
         else:
             raise NotImplementedError
 
         if args.use_ema:
-            model = ModelEmaV2(model, args.model, perf_aug=perf_aug, device="cuda")
+            model = ModelEmaV2(model, args.model, perf_aug=model.perf_aug, device="cuda")
 
         # Retrieves best validation model by looking last epoch saved
         experiment_path = os.path.join(args.experiment_folder, args.experiment_name, f"Split {split_id}")
@@ -208,8 +230,9 @@ def main():
                 assert ground_truths_old == ground_truths
             proba_predictions_final.append(proba_predictions)
         proba_predictions_final = np.mean(proba_predictions_final, axis=0)
+        predicted_classes_final = np.argmax(proba_predictions_final, axis=1)
 
-        # Compute the average AUC over all TTA iterations based on the average probabilities of each TTA
+        # Compute the average metrics over all TTA iterations based on the average probabilities of each TTA
         # iteration
         if n_classes == 2:
             auc_score = metrics.roc_auc_score(ground_truths, proba_predictions_final[:, 1])
@@ -224,7 +247,13 @@ def main():
                     aucs.append(float('nan'))
             auc_score = np.nanmean(np.array(aucs))
 
-        results_dict[f"Split {split_id}"] = auc_score
+        f1_macro_score = metrics.f1_score(ground_truths, predicted_classes_final, average="macro")
+        mcc_score = metrics.matthews_corrcoef(ground_truths, predicted_classes_final)
+
+        results_dict['Model'].append(args.model)
+        results_dict['AUC'].append(auc_score)
+        results_dict['F1_macro'].append(f1_macro_score)
+        results_dict['MCC'].append(mcc_score)
 
     # Save results to CSV file
     result_csv_path = os.path.join(args.experiment_folder, f"results_TTA_{args.test_time_augmentation}.csv") \
@@ -234,10 +263,9 @@ def main():
     if os.path.exists(result_csv_path):
         results = pd.read_csv(result_csv_path)
     else:
-        results = pd.DataFrame(columns=['Model'] + ['Split ' + str(i) for i in range(10)])
-    results = pd.concat([results, pd.DataFrame(results_dict, index=[0])], ignore_index=True)
+        results = pd.DataFrame(columns=results_dict.keys())
+    results = pd.concat([results, pd.DataFrame(results_dict)], ignore_index=True)
     results.to_csv(result_csv_path, index=False)
-
 
 if __name__ == '__main__':
     main()

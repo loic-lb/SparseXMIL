@@ -8,6 +8,7 @@ class AverageMIL(nn.Module):
         super(AverageMIL, self).__init__()
 
         self.name = 'Average'
+        self.perf_aug = False
         self.nb_layers_in = nb_layers_in
         self.n_classes = n_classes
 

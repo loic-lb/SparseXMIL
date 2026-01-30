@@ -2,6 +2,7 @@ import torch.nn as nn
 from MinkowskiEngine import (MinkowskiDepthwiseConvolution,
                              MinkowskiConvolution,
                              MinkowskiBatchNorm,
+                             MinkowskiInstanceNorm,
                              MinkowskiReLU,
                              MinkowskiMaxPooling,
                              SparseTensor,
@@ -24,12 +25,15 @@ class SparseSeparableConv(nn.Module):
 
 class SparseBlock(nn.Module):
 
-    def __init__(self, in_planes, planes, reps, strides=1, start_with_relu=True, exit_flow=False, D=2):
+    def __init__(self, in_planes, planes, reps, strides=1, start_with_relu=True, exit_flow=False, D=2, norm_layer=None):
         super(SparseBlock, self).__init__()
+        if norm_layer is None:
+            raise ValueError("norm_layer should be provided")
+        self.norm_layer = norm_layer
         if planes != in_planes or strides != 1:
             self.skip = nn.Sequential(MinkowskiConvolution(in_planes, planes, kernel_size=1,
                                                            stride=strides, dimension=D),
-                                      MinkowskiBatchNorm(planes))
+                                      self.norm_layer(planes))
         else:
             self.skip = None
 
@@ -41,10 +45,10 @@ class SparseBlock(nn.Module):
                 rep.append(self.activation)
             if exit_flow and i == 0:
                 rep.append(SparseSeparableConv(in_planes, in_planes, kernel_size=3, D=D))
-                rep.append(MinkowskiBatchNorm(in_planes))
+                rep.append(self.norm_layer(in_planes))
             else:
                 rep.append(SparseSeparableConv(in_planes, planes, kernel_size=3, D=D))
-                rep.append(MinkowskiBatchNorm(planes))
+                rep.append(self.norm_layer(planes))
                 in_planes = planes
 
         if strides != 1:
@@ -62,20 +66,44 @@ class SparseBlock(nn.Module):
 
 class SparseXception(nn.Module):
 
-    def __init__(self, D=2):
+    def __init__(self, D=2, norm_layer="batch"):
         super(SparseXception, self).__init__()
+        if norm_layer == "batch":
+            norm_layer_1 = MinkowskiBatchNorm
+            norm_layer_2 = MinkowskiBatchNorm
+            norm_layer_3 = MinkowskiBatchNorm
+        elif norm_layer == "instance":
+            norm_layer_1 = MinkowskiInstanceNorm
+            norm_layer_2 = MinkowskiInstanceNorm
+            norm_layer_3 = MinkowskiInstanceNorm
+        elif norm_layer == "hybrid":
+            norm_layer_1 = MinkowskiBatchNorm
+            norm_layer_2 = MinkowskiInstanceNorm
+            norm_layer_3 = MinkowskiInstanceNorm
+        elif norm_layer == "hybrid_only_end":
+            norm_layer_1 = MinkowskiBatchNorm
+            norm_layer_2 = MinkowskiBatchNorm
+            norm_layer_3 = MinkowskiInstanceNorm
+        else:
+            raise ValueError("Unknown norm layer: {}".format(norm_layer))
 
-        self.entry_flow = nn.Sequential(SparseBlock(64, 128, 2, 2, start_with_relu=False, D=D),
-                                        SparseBlock(128, 256, 2, 2, D=D),
-                                        SparseBlock(256, 728, 2, 2, D=D))
-        self.middle_flow = nn.Sequential(*[SparseBlock(728, 728, 3, 1, D=D) for _ in range(8)])
+        self.entry_flow = nn.Sequential(SparseBlock(64, 128, 2, 2, start_with_relu=False,
+                                                    D=D, norm_layer=norm_layer_1),
+                                        SparseBlock(128, 256, 2, 2,
+                                                    D=D, norm_layer=norm_layer_1),
+                                        SparseBlock(256, 728, 2, 2,
+                                                    D=D, norm_layer=norm_layer_1))
 
-        self.exit_flow = nn.Sequential(SparseBlock(728, 1024, 2, 2, D=D, exit_flow=True),
+        self.middle_flow = nn.Sequential(*[SparseBlock(728, 728, 3, 1, D=D,
+                                                       norm_layer=norm_layer_2) for _ in range(8)])
+
+        self.exit_flow = nn.Sequential(SparseBlock(728, 1024, 2, 2,
+                                                   D=D, exit_flow=True, norm_layer=norm_layer_3),
                                        SparseSeparableConv(1024, 1536, 3, D=D),
-                                       MinkowskiBatchNorm(1536),
+                                       norm_layer_3(1536),
                                        MinkowskiReLU(),
                                        SparseSeparableConv(1536, 2048, 3, D=D),
-                                       MinkowskiBatchNorm(2048),
+                                       norm_layer_3(2048),
                                        MinkowskiReLU(),
                                        )
 

@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Sequential as Seq
-from torch_geometric.nn import GINConv
+from torch_geometric.nn import GINConv, aggr
 from torch_geometric.data import Data, Batch
 from torch_geometric.transforms import RadiusGraph, KNNGraph
-from torch_geometric.nn import aggr
+from torch_geometric.utils import dropout_edge
 
 
 class AttentionGate(nn.Module):
@@ -33,7 +33,7 @@ class AttentionGate(nn.Module):
 # DeepGraphConv Implementation #
 ######################################
 class DGCNMIL(nn.Module):
-    def __init__(self, num_features=1024, hidden_dim=256, dropout=0.25, n_classes=2):
+    def __init__(self, num_features=1024, hidden_dim=256, dropout=0.25, n_classes=2, perf_aug=False):
         super(DGCNMIL, self).__init__()
         self.name = "DGCNMIL"
         self.num_features = num_features
@@ -41,6 +41,7 @@ class DGCNMIL(nn.Module):
         # Uncomment to use radius graph instead of knn
         #self.r = 0.5
         self.neigh = 8
+        self.perf_aug = perf_aug
         self.graph_transform = KNNGraph(k=self.neigh)
 
         self.conv1 = GINConv(Seq(nn.Linear(num_features, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)))
@@ -68,6 +69,9 @@ class DGCNMIL(nn.Module):
             #                       tiles[i].max(axis=0)[0][None, ].float())
             #graph_transform = RadiusGraph(r=self.r * max_dist)
             g = self.graph_transform(g)
+            if self.perf_aug:
+                new_edge_index = dropout_edge(g.edge_index, p=0.2)[0]
+                g = Data(x=g.x, pos=g.pos, edge_index=new_edge_index)
             batch.append(g)
         return Batch.from_data_list(batch)
 

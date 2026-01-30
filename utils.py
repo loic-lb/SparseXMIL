@@ -1,3 +1,4 @@
+import os
 import cv2
 import random
 import torch
@@ -359,3 +360,35 @@ def create_mask_from_contours(WSI_object, heatmap_shape, downsample):
     cv2.drawContours(mask, WSI_object.scaleContourDim(WSI_object.contours_tissue, scale), -1, (1), -1)
     mask = np.expand_dims(mask, -1).repeat(3, -1).astype("uint8")
     return mask
+
+def save_model(model, optimizer, hyper_parameters, epoch, val, best_val, save_every):
+    """
+    Saves the model if the validation score is better than the previous best score
+    @param model: model to save
+    @param experiment_path: path to save the model
+    @param epoch: current epoch
+    @param val: current validation score
+    @param criteria: criteria to use for saving the model
+    @param best_val: best validation score so far
+    @param save_every: save every n epochs
+    @param lower_is_better: set to True if lower values are better (e.g. loss)
+    """
+    if hyper_parameters['criteria'] == "auc":
+        check_condition = val > best_val
+    elif hyper_parameters['criteria'] == "loss":
+        check_condition = val < best_val
+    else:
+        raise NotImplementedError
+    if check_condition and (epoch % save_every == 0):
+        print("New best performing model on val dataset, saving model....")
+        checkpoint = {
+            'model': model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'settings': hyper_parameters,
+            'epoch': epoch,
+        }
+        torch.save(checkpoint,
+                   os.path.join(hyper_parameters['experiment_path'], f"model_{epoch}.pt"))
+        best_val = val
+        print(f"New best val {hyper_parameters['criteria']}:{best_val}")
+    return best_val

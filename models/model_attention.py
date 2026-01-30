@@ -9,6 +9,7 @@ class GatedAttention(nn.Module):
         super(GatedAttention, self).__init__()
 
         self.name = 'Attention'
+        self.perf_aug = False
         self.nb_layers_in = nb_layers_in
         self.L = 500
         self.D = 128
