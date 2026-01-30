@@ -38,7 +38,7 @@ class DenseXMIL(nn.Module):
         self.classifier = self.get_classifier()
 
     def get_adapt_layer(self):
-        return nn.Sequential(nn.Linear(1024, 64), nn.ReLU())
+        return nn.Sequential(nn.Linear(self.nb_layers_in, 64), nn.ReLU())
 
     def get_classifier(self):
         return nn.Sequential(nn.Linear(2048, self.num_classes))

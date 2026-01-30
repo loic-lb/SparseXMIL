@@ -44,7 +44,7 @@ def main():
     parser.add_argument('--model', type=str, choices=["attention", "xmil",
                                                       "transmil", "average", "sparseconvmil",
                                                       "dgcn"],
-                        default='xception', metavar='MODEL', help='model name')
+                        default='xmil', metavar='MODEL', help='model name')
     parser.add_argument('--transmil_size', type=int, default=512, metavar='SIZE', help='size of the transmil layers')
     parser.add_argument('--sparse-map-downsample', type=int, default=256, help='downsampling factor of the sparse map')
 
@@ -114,7 +114,7 @@ def main():
         if args.model == 'attention':
             model = GatedAttention(1024, n_classes).cuda()
         elif args.model == 'transmil':
-            model = TransMIL(n_classes, args.transmil_size).cuda()
+            model = TransMIL(1024, n_classes, args.transmil_size).cuda()
         elif args.model == 'dgcn':
             model = DGCNMIL(num_features=1024, n_classes=n_classes).cuda()
         elif args.model == 'xmil':

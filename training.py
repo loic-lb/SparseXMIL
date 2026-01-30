@@ -67,7 +67,7 @@ def _define_args():
                         help='model name')
     parser.add_argument('--transmil_size', type=int, default=512, choices=[256, 512],
                         metavar='SIZE', help='size of the TransMIL layers')
-    parser.add_argument('--sparse-map-downsample', type=int, default=10, help='downsampling factor of the sparse map')
+    parser.add_argument('--sparse-map-downsample', type=int, default=256, help='downsampling factor of the sparse map')
     parser.add_argument('--remove_perf_image_aug', action="store_false", help='remove image augmentation')
     parser.add_argument('--perf_graph_aug', action="store_true", help='perform graph augmentation')
     parser.add_argument('--perf_transf_aug', action="store_true",
@@ -177,8 +177,6 @@ def perform_epoch(mil_model, mil_model_ema, dataloader, optimizer, loss_function
 
                 loss = loss_function(predictions, slides_labels)
 
-        training_time = time.time() - start_time
-
         predictions = softmax(predictions, dim=-1)
 
         # Store data for finale epoch average measures
@@ -189,7 +187,7 @@ def perform_epoch(mil_model, mil_model_ema, dataloader, optimizer, loss_function
     proba_predictions = np.array(proba_predictions)
     predicted_classes = np.argmax(proba_predictions, axis=1)
 
-    return losses, proba_predictions, ground_truths, predicted_classes, training_time
+    return losses, proba_predictions, ground_truths, predicted_classes
 
 
 def main(hyper_parameters):
@@ -276,7 +274,7 @@ def main(hyper_parameters):
     for epoch in range(hyper_parameters["epochs"]):
         model.train()
         train_losses, train_probas, \
-            train_ground_truths, train_predicted_classes, _ = perform_epoch(model, model_ema,
+            train_ground_truths, train_predicted_classes = perform_epoch(model, model_ema,
                                                                                         train_dataloader, optimizer,
                                                                                         loss_function,
                                                                                         clip=hyper_parameters['clip'])
@@ -297,7 +295,7 @@ def main(hyper_parameters):
         for sampling_id in range(nb_repeat):
 
             val_losses, val_probas, \
-                val_ground_truths, val_predicted_classes, _ = perform_epoch(model,
+                val_ground_truths, val_predicted_classes = perform_epoch(model,
                                                                                     model_ema,
                                                                                     val_dataloader, optimizer,
                                                                                     loss_function, train=False)
