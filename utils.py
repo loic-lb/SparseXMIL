@@ -371,7 +371,6 @@ def save_model(model, optimizer, hyper_parameters, epoch, val, best_val, save_ev
     @param criteria: criteria to use for saving the model
     @param best_val: best validation score so far
     @param save_every: save every n epochs
-    @param lower_is_better: set to True if lower values are better (e.g. loss)
     """
     if hyper_parameters['criteria'] == "auc":
         check_condition = val > best_val

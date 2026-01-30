@@ -15,10 +15,8 @@ from models.model_sparseconvmil import SparseConvMIL
 from models.model_xmil import XMIL
 from models.model_xmil_dense import DenseXMIL
 from models.model_nic import NIC
-from utils import get_dataloader
+from utils import get_dataloader, apply_random_seed
 from models.model_utils import ModelEmaV2
-from utils import apply_random_seed
-
 
 def main():
     parser = argparse.ArgumentParser(description='SparseConvMIL: Sparse Convolutional Context-Aware Multiple Instance '
