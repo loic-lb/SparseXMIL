@@ -1,6 +1,6 @@
 # SparseXMIL
 
-This repository contains the code for the paper "SparseXMIL: Leveraging spatial convolutions for context-aware and memory-efficient classification of whole slide images in digital pathology" ([link to the preprint](https://hal.science/hal-04531177v2)).
+This repository contains the code for the paper "SparseXMIL: Leveraging spatial convolutions for context-aware and memory-efficient classification of whole slide images in digital pathology" ([link to the paper](https://doi.org/10.1016/j.media.2026.104047)).
 
 For your convenience, materials to reproduce the experiments (extracted patches, trained models, etc.) are made available in this [onedrive repository](https://centralesupelec-my.sharepoint.com/:u:/g/personal/loic_le-bescond_centralesupelec_fr/EUT0qiy0t1lIppKHN3_PGTQBnO0X_et0tElqxP860YsvzA?e=cR4pWq).
 
@@ -240,15 +240,17 @@ To run the scalability experiments, you may use the script `script_scalability.s
 If you find this code useful in your research then please cite:
 
 ```
-@unpublished{lebescond:hal-04531177,
-  TITLE = {{SparseXMIL: Leveraging sparse convolutions for context-aware and memory-efficient classification of whole slide images in digital pathology}},
-  AUTHOR = {Le Bescond, Lo{\"i}c and Lerousseau, Marvin and Andre, Fabrice and Talbot, Hugues},
-  URL = {https://hal.science/hal-04531177},
-  YEAR = {2025},
-  MONTH = Jan,
-  KEYWORDS = {Multiple Instance Learning ; Convolutional Neural Networks ; Computational Pathology ; Resource Efficient},
-  HAL_ID = {hal-04531177},
-  HAL_VERSION = {v2},
+@article{LEBESCOND2026104047,
+title = {SparseXMIL: Leveraging sparse convolutions for context-aware and memory-efficient classification of whole slide images in digital pathology},
+journal = {Medical Image Analysis},
+volume = {111},
+pages = {104047},
+year = {2026},
+issn = {1361-8415},
+doi = {https://doi.org/10.1016/j.media.2026.104047},
+url = {https://www.sciencedirect.com/science/article/pii/S1361841526001167},
+author = {Loïc {Le Bescond} and Marvin Lerousseau and Fabrice André and Hugues Talbot},
+keywords = {Multiple instance learning, Convolutional neural networks, Computational pathology, Resource efficient},
 }
 ```
 
